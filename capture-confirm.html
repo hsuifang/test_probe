@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>存好了</title>
+<style>
+  :root { color-scheme: light dark; --ok:#1f7a3d; --muted:rgba(128,128,128,.9); }
+  @media (prefers-color-scheme: dark) { :root { --ok:#4ec27a; } }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 18px;
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    background: Canvas; color: CanvasText;
+    -webkit-text-size-adjust: 100%;
+  }
+  .ok { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+  .ok svg { flex: none; }
+  .ok h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: .02em; }
+  .card {
+    border: 1px solid rgba(128,128,128,.28); border-radius: 14px;
+    padding: 15px 16px;
+  }
+  .row + .row { margin-top: 13px; padding-top: 13px; border-top: 1px solid rgba(128,128,128,.2); }
+  .lbl { font-size: 12px; letter-spacing: .09em; text-transform: uppercase;
+         color: var(--muted); margin-bottom: 3px; }
+  .val { word-break: break-all; }
+  .val.text { white-space: pre-wrap; word-break: break-word; }
+  .val.empty { color: var(--muted); font-style: italic; }
+  a { color: inherit; }
+  .mono { font-variant-numeric: tabular-nums; }
+  .absent { margin-top: 18px; font-size: 13px; color: var(--muted); }
+  footer { margin-top: 26px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="ok">
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="11" fill="var(--ok)"/>
+    <path d="M7 12.4l3.3 3.3L17 9" stroke="#fff" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <h1>存好了</h1>
+</div>
+
+<div class="card" id="card"></div>
+<div class="absent" id="absent" hidden></div>
+
+<footer>可以直接分享下一筆。</footer>
+
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var get = function (k) { var v = q.get(k); return v === null ? '' : v; };
+
+  var path = get('path') || 'link';
+  var url  = get('url');
+  var text = get('text');
+  var tRaw = get('t');
+  var at   = get('at');
+
+  // 三態對照表，直接照抄 p2-record-shape.md §3 / p3a-record-format.md §4。
+  // not_applicable 永不顯示 —— 只有 missing 會出現在「未取得」那一行。
+  var NA = {
+    'link':             ['content_time', 'location'],
+    'image-screenshot': ['location'],
+    'image-camera':     ['video_offset_sec'],
+    'text':             ['source_url', 'image', 'video_offset_sec', 'content_time', 'location']
+  };
+  var LABEL = {
+    image: '影像', source_url: '來源連結', video_offset_sec: '影片時間點',
+    content_time: '內容時間', location: '位置'
+  };
+
+  function missingFields() {
+    var na = NA[path] || [];
+    var out = [];
+    var consider = function (f, absent) {
+      if (na.indexOf(f) !== -1) return;   // 不適用 → 永不顯示
+      if (absent) out.push(LABEL[f]);
+    };
+    consider('image',            !get('img'));
+    consider('source_url',       !url);
+    consider('video_offset_sec', !tRaw);
+    consider('content_time',     !get('ct'));
+    consider('location',         !get('loc'));
+    return out;
+  }
+
+  function mmss(sec) {
+    var n = parseInt(sec, 10);
+    if (!isFinite(n) || n < 0) return null;
+    var h = Math.floor(n / 3600), m = Math.floor((n % 3600) / 60), s = n % 60;
+    var p = function (x) { return String(x).padStart(2, '0'); };
+    return (h ? h + ':' + p(m) : m) + ':' + p(s);
+  }
+
+  var rows = [];
+  if (url) {
+    // 只有 http(s) 才做成連結，避免 javascript: 一類的協定被帶進 href
+    var safe = /^https?:\/\//i.test(url);
+    rows.push(['來源',
+      safe ? '<a href="' + esc(url) + '">' + esc(url) + '</a>' : esc(url), 'val']);
+  }
+  if (tRaw) {
+    var pretty = mmss(tRaw);
+    rows.push(['影片時間點',
+      esc(pretty ? pretty + '（' + tRaw + ' 秒）' : tRaw), 'val mono']);
+  }
+  rows.push(['你寫的',
+    text ? esc(text) : '（沒有寫，這樣就可以）',
+    text ? 'val text' : 'val text empty']);
+  if (at) rows.push(['存入時間', esc(at), 'val mono']);
+
+  document.getElementById('card').innerHTML = rows.map(function (r) {
+    return '<div class="row"><div class="lbl">' + r[0] + '</div>' +
+           '<div class="' + r[2] + '">' + r[1] + '</div></div>';
+  }).join('');
+
+  var miss = missingFields();
+  if (miss.length) {
+    var el = document.getElementById('absent');
+    el.textContent = '這一筆沒有：' + miss.join('、');
+    el.hidden = false;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c];
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
